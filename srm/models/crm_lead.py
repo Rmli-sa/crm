@@ -17,6 +17,10 @@ class CrmLead(models.Model):
             ("customer", "Customer Lead"),
             ("supplier", "Supplier Lead"),
         ],
+        tracking=True,
+        help="Supplier leads are handled in the SRM app, every other lead in "
+        "the CRM app. Leave it empty when unknown: the lead stays in the CRM "
+        "app and can be moved to the SRM app later.",
     )
     purchase_amount_total = fields.Monetary(
         compute="_compute_purchase_amount_total",

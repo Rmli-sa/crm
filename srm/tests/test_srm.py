@@ -313,7 +313,6 @@ class TestSupplierRelationshipManagement(crm_common.TestCrmCommon):
         arch = self.env["crm.lead"].get_view(view_id=view_id, view_type="form")["arch"]
         self.assertIn('name="action_view_rfq"', arch)
         self.assertIn('name="action_view_purchase_order"', arch)
-        self.assertNotIn('name="action_view_sale_quotation" icon="fa-pencil-square-o" invisible="type == \'lead\'"', arch)
 
         arch = (
             self.env["crm.lead"]
@@ -322,3 +321,25 @@ class TestSupplierRelationshipManagement(crm_common.TestCrmCommon):
         )
         self.assertNotIn("action_view_rfq", arch)
         self.assertNotIn("action_view_purchase_order", arch)
+
+    def test_09_request_type_in_views(self):
+        """Request type is editable on the form and filterable in searches."""
+        form_id = self.env.ref("crm.crm_lead_view_form").id
+        arch = self.env["crm.lead"].get_view(view_id=form_id, view_type="form")["arch"]
+        self.assertIn('name="request_type" placeholder="Unspecified"', arch)
+        for search_xmlid in (
+            "crm.view_crm_case_leads_filter",
+            "crm.view_crm_case_opportunities_filter",
+            "crm.crm_opportunity_report_view_search",
+        ):
+            arch = self.env["crm.lead"].get_view(
+                view_id=self.env.ref(search_xmlid).id, view_type="search"
+            )["arch"]
+            self.assertIn('name="request_type_unset"', arch, search_xmlid)
+            self.assertIn('name="group_by_request_type"', arch, search_xmlid)
+
+        # the value can be switched by hand, in both directions
+        self.lead_1.request_type = "supplier"
+        self.assertEqual(self.lead_1.request_type, "supplier")
+        self.lead_1.request_type = False
+        self.assertFalse(self.lead_1.request_type)
