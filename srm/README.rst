@@ -32,10 +32,23 @@ SRM
 
 |badge1| |badge2| |badge3| |badge4| |badge5|
 
-This module allows the usage of crm module to manage leads coming from
-suppliers. The flow is similar to CRM. The main change is that leads be
-generated from customer or supplier request type. For supplier requests
-leads can be converted in purchases.
+This module reuses the CRM lead model to manage leads and opportunities
+coming from suppliers. The flow mirrors the CRM one: a lead gets a
+*request type* (customer or supplier), and supplier opportunities are
+converted into requests for quotation and purchase orders instead of
+quotations and sales orders.
+
+The two apps split the same records:
+
+- **SRM** only shows supplier leads and opportunities.
+- **CRM** shows everything else, including records whose request type
+  was never set (imports, incoming e-mails, website forms, other
+  integrations). Such records stay visible and can be moved to either
+  app by editing the request type on the lead form.
+
+Supplier opportunities carry *RFQs* and *Purchase Orders* smart buttons
+that open the linked purchase documents, and a purchase order can be
+linked back to its supplier opportunity.
 
 .. IMPORTANT::
    This is an alpha version, the data model and design can change at any time without warning.
@@ -46,6 +59,22 @@ leads can be converted in purchases.
 
 .. contents::
    :local:
+
+Usage
+=====
+
+- Open the *SRM* app to work with supplier leads and opportunities.
+  Records created there get the *Supplier Lead* request type; records
+  created from the *CRM* app get *Customer Lead*.
+- On a supplier opportunity, use *New RFQ* to create a request for
+  quotation, and the *RFQs* / *Purchase Orders* smart buttons to open
+  the linked purchase documents.
+- To move a record between the two apps, or to classify one that was
+  created without a request type, edit *Request Type* on the lead form.
+  *Request Type* filters and a group-by are available in the lead,
+  opportunity and reporting search views.
+- On a purchase order, *Supplier Opportunity* links the order to its SRM
+  opportunity.
 
 Bug Tracker
 ===========

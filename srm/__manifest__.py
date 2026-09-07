@@ -4,7 +4,7 @@
 {
     "name": "SRM",
     "summary": "Use CRM model for suppliers",
-    "version": "19.0.1.0.0",
+    "version": "19.0.1.1.0",
     "development_status": "Alpha",
     "category": "CRM",
     "website": "https://github.com/OCA/crm",
