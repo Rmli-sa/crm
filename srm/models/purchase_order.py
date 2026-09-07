@@ -9,7 +9,9 @@ class PurchaseOrder(models.Model):
 
     opportunity_id = fields.Many2one(
         comodel_name="crm.lead",
+        string="Supplier Opportunity",
         check_company=True,
+        help="SRM opportunity this request for quotation was created for.",
         domain="""
             [
                 ('type', '=', 'opportunity'),
