@@ -5,7 +5,13 @@ from odoo.tests.common import TransactionCase, tagged
 from odoo.tools.safe_eval import safe_eval
 
 from odoo.addons.base.tests.common import DISABLED_MAIL_CONTEXT
-from odoo.addons.srm.hooks import CORE_ACTIONS, uninstall_hook
+from odoo.addons.srm.hooks import (
+    CORE_RECORDS,
+    LEGACY_RECORDS,
+    OVERRIDDEN_RECORDS,
+    restore_core_records,
+    uninstall_hook,
+)
 
 
 @tagged("lead_manage")
@@ -121,11 +127,58 @@ class TestSrmVisibility(TransactionCase):
         )
 
     def test_uninstall_hook_restores_core_actions(self):
-        for xmlid in CORE_ACTIONS:
+        for xmlid in OVERRIDDEN_RECORDS:
             self.assertIn("request_type", self.env.ref(xmlid).domain, xmlid)
         uninstall_hook(self.env)
-        for xmlid, values in CORE_ACTIONS.items():
-            action = self.env.ref(xmlid)
+        for xmlid, values in CORE_RECORDS.items():
+            record = self.env.ref(xmlid)
             for field, value in values.items():
-                self.assertEqual(action[field], value, f"{xmlid}.{field}")
-            self.assertNotIn("request_type", action.domain or "", xmlid)
+                self.assertEqual(record[field], value, f"{xmlid}.{field}")
+
+    def test_legacy_pipeline_override_is_reset(self):
+        """srm < 19.0.1.1.0 rewrote the core pipeline records in place.
+
+        The upgrade migration resets them; until then the CRM pipeline is
+        double-filtered and the SRM one is empty.
+        """
+        self.env.ref("crm.crm_lead_action_pipeline").write(
+            {
+                "domain": (
+                    "[('type','=','opportunity'), ('request_type','=','customer')]"
+                ),
+                "context": (
+                    "{'default_type': 'opportunity', "
+                    "'default_request_type': 'customer'}"
+                ),
+            }
+        )
+        self.env.ref("crm.action_your_pipeline").code = (
+            "action = model.with_context(request_type='customer')"
+            ".action_your_pipeline()"
+        )
+        Team = self.env["crm.team"]
+        self.assertEqual(
+            self._records_of(Team.action_your_pipeline()), self.customer_opp
+        )
+        self.assertFalse(
+            self._records_of(
+                Team.with_context(request_type="supplier").action_your_pipeline()
+            )
+        )
+
+        restore_core_records(self.env, LEGACY_RECORDS)
+
+        self.assertEqual(
+            self._records_of(Team.action_your_pipeline()),
+            self.customer_opp | self.unset_opp,
+        )
+        self.assertEqual(
+            self._records_of(
+                Team.with_context(request_type="supplier").action_your_pipeline()
+            ),
+            self.supplier_opp,
+        )
+        for xmlid in LEGACY_RECORDS:
+            record = self.env.ref(xmlid)
+            for field, value in CORE_RECORDS[xmlid].items():
+                self.assertEqual(record[field], value, f"{xmlid}.{field}")
