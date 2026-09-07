@@ -43,6 +43,14 @@ class CrmLead(models.Model):
     def _get_lead_request_for_quotation_domain(self):
         return Domain("state", "in", ("draft", "sent"))
 
+    def _get_action_view_rfq_domain(self):
+        """RFQs listed by the smart button: every unconfirmed order.
+
+        Mirrors ``sale_crm``: the counter ignores cancelled RFQs, but the list
+        opened from the button still shows them.
+        """
+        return Domain("state", "in", ("draft", "sent", "cancel"))
+
     def _get_purchase_order_lead_domain(self):
         return Domain("opportunity_id", "in", self.ids)
 
@@ -145,3 +153,47 @@ class CrmLead(models.Model):
         if self.user_id:
             rfq_context["default_user_id"] = self.user_id.id
         return rfq_context
+
+    def action_view_rfq(self):
+        """Open the RFQs linked to this lead (``RFQs`` smart button)."""
+        self.ensure_one()
+        action = self.env["ir.actions.actions"]._for_xml_id("purchase.purchase_rfq")
+        action["context"] = dict(self._prepare_rfq_context(), quotation_only=True)
+        action["domain"] = Domain.AND(
+            [
+                Domain("opportunity_id", "=", self.id),
+                self._get_action_view_rfq_domain(),
+            ]
+        )
+        rfqs = self.purchase_order_ids.filtered_domain(
+            self._get_action_view_rfq_domain()
+        )
+        if len(rfqs) == 1:
+            action["views"] = [
+                (self.env.ref("purchase.purchase_order_form").id, "form")
+            ]
+            action["res_id"] = rfqs.id
+        return action
+
+    def action_view_purchase_order(self):
+        """Open the confirmed purchase orders linked to this lead."""
+        self.ensure_one()
+        action = self.env["ir.actions.actions"]._for_xml_id(
+            "purchase.purchase_form_action"
+        )
+        action["context"] = self._prepare_rfq_context()
+        action["domain"] = Domain.AND(
+            [
+                Domain("opportunity_id", "=", self.id),
+                self._get_lead_purchase_order_domain(),
+            ]
+        )
+        orders = self.purchase_order_ids.filtered_domain(
+            self._get_lead_purchase_order_domain()
+        )
+        if len(orders) == 1:
+            action["views"] = [
+                (self.env.ref("purchase.purchase_order_form").id, "form")
+            ]
+            action["res_id"] = orders.id
+        return action

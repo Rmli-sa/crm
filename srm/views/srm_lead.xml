@@ -83,9 +83,10 @@
                 <button
                     class="oe_stat_button"
                     type="object"
-                    name="action_view_sale_quotation"
+                    name="action_view_rfq"
                     icon="fa-pencil-square-o"
-                    invisible="type == 'lead'"
+                    invisible="type == 'lead' or request_type != 'supplier'"
+                    groups="purchase.group_purchase_user"
                 >
                     <field
                         name="request_for_quotation_count"
@@ -96,9 +97,10 @@
                 <button
                     class="oe_stat_button"
                     type="object"
-                    invisible="purchase_amount_total == 0 or type == 'lead'"
-                    name="action_view_sale_order"
+                    name="action_view_purchase_order"
                     icon="fa-usd"
+                    invisible="purchase_order_count == 0 or type == 'lead' or request_type != 'supplier'"
+                    groups="purchase.group_purchase_user"
                 >
                     <div class="o_field_widget o_stat_info">
                         <span class="o_stat_value">
