@@ -46,8 +46,10 @@ class TestSupplierRelationshipManagement(crm_common.TestCrmCommon):
             }
         )
 
-        cls._create_crm_purchase_orders(cls.lead_1, cls.contact_company)
-        cls._create_crm_purchase_orders(
+        cls.lead_1_orders = cls._create_crm_purchase_orders(
+            cls.lead_1, cls.contact_company
+        )
+        cls.lead_2_orders = cls._create_crm_purchase_orders(
             cls.lead_2,
             cls.contact_company_1,
             prefix="OTHER",
@@ -87,21 +89,24 @@ class TestSupplierRelationshipManagement(crm_common.TestCrmCommon):
 
     @classmethod
     def _create_crm_purchase_orders(cls, lead, partner, prefix="MAIN"):
-        cls.rfq_draft = cls._create_purchase_order(
-            lead, partner, 1.0, state="draft", name_suffix=f"{prefix} RFQ DRAFT"
-        )
-        cls.rfq_sent = cls._create_purchase_order(
-            lead, partner, 2.0, state="sent", name_suffix=f"{prefix} RFQ SENT"
-        )
-        cls.po_1 = cls._create_purchase_order(
-            lead, partner, 3.0, state="purchase", name_suffix=f"{prefix} PO 1"
-        )
-        cls.po_2 = cls._create_purchase_order(
-            lead, partner, 4.0, state="purchase", name_suffix=f"{prefix} PO 2"
-        )
-        cls.po_cancel = cls._create_purchase_order(
-            lead, partner, 5.0, state="cancel", name_suffix=f"{prefix} PO CANCEL"
-        )
+        """Create one order per state for ``lead`` and return them by key."""
+        return {
+            "rfq_draft": cls._create_purchase_order(
+                lead, partner, 1.0, state="draft", name_suffix=f"{prefix} RFQ DRAFT"
+            ),
+            "rfq_sent": cls._create_purchase_order(
+                lead, partner, 2.0, state="sent", name_suffix=f"{prefix} RFQ SENT"
+            ),
+            "po_1": cls._create_purchase_order(
+                lead, partner, 3.0, state="purchase", name_suffix=f"{prefix} PO 1"
+            ),
+            "po_2": cls._create_purchase_order(
+                lead, partner, 4.0, state="purchase", name_suffix=f"{prefix} PO 2"
+            ),
+            "po_cancel": cls._create_purchase_order(
+                lead, partner, 5.0, state="cancel", name_suffix=f"{prefix} PO CANCEL"
+            ),
+        }
 
     def test_00_lead_purchase_data(self):
         """Test that the lead's purchase data is correctly computed."""
@@ -111,8 +116,12 @@ class TestSupplierRelationshipManagement(crm_common.TestCrmCommon):
         # Purchase Orders: confirmed only (draft/sent/cancel excluded)
         self.assertEqual(self.lead_1.purchase_order_count, 2)
 
-        expected_amount = self.po_1.amount_untaxed + self.po_2.amount_untaxed
+        orders = self.lead_1_orders
+        expected_amount = orders["po_1"].amount_untaxed + orders["po_2"].amount_untaxed
         self.assertEqual(self.lead_1.purchase_amount_total, expected_amount)
+        # the other lead's orders must not leak into this lead's figures
+        self.assertEqual(self.lead_2.purchase_order_count, 2)
+        self.assertNotEqual(self.lead_2_orders["po_1"], orders["po_1"])
 
     def test_01_lead_create_request_type_partner(self):
         """Test that a customer is created with specified type."""
@@ -260,3 +269,77 @@ class TestSupplierRelationshipManagement(crm_common.TestCrmCommon):
         self.assertEqual(lead.partner_id, self.env["res.partner"])
         self.assertEqual(action["context"]["default_partner_id"], False)
         self.assertEqual(action["context"]["default_opportunity_id"], lead.id)
+
+    def test_06_action_view_rfq(self):
+        """The RFQs smart button opens this lead's unconfirmed purchase orders."""
+        orders = self.lead_1_orders
+        action = self.lead_1.action_view_rfq()
+        self.assertEqual(action["res_model"], "purchase.order")
+        self.assertEqual(action["context"]["default_opportunity_id"], self.lead_1.id)
+        self.assertEqual(action["context"]["default_partner_id"], False)
+        self.assertEqual(
+            self.env["purchase.order"].search(action["domain"]),
+            orders["rfq_draft"] | orders["rfq_sent"] | orders["po_cancel"],
+        )
+        self.assertFalse(action.get("res_id"))
+
+    def test_07_action_view_purchase_order(self):
+        """The Purchase Orders smart button opens confirmed orders only."""
+        orders = self.lead_1_orders
+        action = self.lead_1.action_view_purchase_order()
+        self.assertEqual(action["res_model"], "purchase.order")
+        self.assertEqual(
+            self.env["purchase.order"].search(action["domain"]),
+            orders["po_1"] | orders["po_2"],
+        )
+        self.assertFalse(action.get("res_id"))
+
+        # a single remaining order opens straight in its form view
+        orders["po_2"].button_cancel()
+        action = self.lead_1.action_view_purchase_order()
+        self.assertEqual(action["res_id"], orders["po_1"].id)
+        self.assertEqual(
+            action["views"],
+            [(self.env.ref("purchase.purchase_order_form").id, "form")],
+        )
+
+    def test_08_form_view_buttons(self):
+        """The opportunity form wires the purchase buttons to purchase actions.
+
+        The buttons are restricted to purchase users so a plain salesperson never
+        triggers the purchase.order aggregates behind the counters.
+        """
+        view_id = self.env.ref("crm.crm_lead_view_form").id
+        arch = self.env["crm.lead"].get_view(view_id=view_id, view_type="form")["arch"]
+        self.assertIn('name="action_view_rfq"', arch)
+        self.assertIn('name="action_view_purchase_order"', arch)
+
+        arch = (
+            self.env["crm.lead"]
+            .with_user(self.user_sales_leads)
+            .get_view(view_id=view_id, view_type="form")["arch"]
+        )
+        self.assertNotIn("action_view_rfq", arch)
+        self.assertNotIn("action_view_purchase_order", arch)
+
+    def test_09_request_type_in_views(self):
+        """Request type is editable on the form and filterable in searches."""
+        form_id = self.env.ref("crm.crm_lead_view_form").id
+        arch = self.env["crm.lead"].get_view(view_id=form_id, view_type="form")["arch"]
+        self.assertIn('name="request_type" placeholder="Unspecified"', arch)
+        for search_xmlid in (
+            "crm.view_crm_case_leads_filter",
+            "crm.view_crm_case_opportunities_filter",
+            "crm.crm_opportunity_report_view_search",
+        ):
+            arch = self.env["crm.lead"].get_view(
+                view_id=self.env.ref(search_xmlid).id, view_type="search"
+            )["arch"]
+            self.assertIn('name="request_type_unset"', arch, search_xmlid)
+            self.assertIn('name="group_by_request_type"', arch, search_xmlid)
+
+        # the value can be switched by hand, in both directions
+        self.lead_1.request_type = "supplier"
+        self.assertEqual(self.lead_1.request_type, "supplier")
+        self.lead_1.request_type = False
+        self.assertFalse(self.lead_1.request_type)

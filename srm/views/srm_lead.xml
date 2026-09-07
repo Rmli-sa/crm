@@ -5,26 +5,49 @@
         <field name="model">crm.lead</field>
         <field name="inherit_id" ref="crm.crm_lead_view_form" />
         <field name="arch" type="xml">
+            <!-- Leads: request type above the contact block -->
+            <xpath
+                expr='//group[@name="lead_partner"]//field[@name="partner_id"]'
+                position="before"
+            >
+                <field name="request_type" placeholder="Unspecified" />
+            </xpath>
+            <!-- Opportunities: request type, then the partner labelled after it -->
             <xpath
                 expr='//group[@name="opportunity_partner"]//field[@name="partner_id"]'
-                position='attributes'
+                position="attributes"
             >
-                <attribute name="invisible">1</attribute>
+                <attribute name="invisible">request_type == 'supplier'</attribute>
             </xpath>
             <xpath
                 expr='//group[@name="opportunity_partner"]//field[@name="partner_id"]'
-                position='before'
+                position="before"
             >
-                <field name="request_type" invisible="1" />
+                <field name="request_type" placeholder="Unspecified" />
                 <field
                     name="partner_id"
                     string="Supplier"
-                    invisible="request_type == 'customer'"
-                />
-                <field
-                    name="partner_id"
-                    string="Customer"
-                    invisible="request_type != 'customer'"
+                    widget="res_partner_many2one"
+                    invisible="request_type != 'supplier'"
+                    context="{'res_partner_search_mode': 'supplier',
+                        'default_name': contact_name or partner_name,
+                        'default_street': street,
+                        'default_is_company': contact_name == False,
+                        'default_company_name': partner_name,
+                        'default_street2': street2,
+                        'default_city': city,
+                        'default_state_id': state_id,
+                        'default_zip': zip,
+                        'default_country_id': country_id,
+                        'default_function': function,
+                        'default_phone': phone,
+                        'default_email': email_from,
+                        'default_user_id': user_id,
+                        'default_team_id': team_id,
+                        'default_website': website,
+                        'default_lang': lang_code,
+                        'show_vat': True,
+                    }"
                 />
             </xpath>
         </field>
@@ -83,9 +106,10 @@
                 <button
                     class="oe_stat_button"
                     type="object"
-                    name="action_view_sale_quotation"
+                    name="action_view_rfq"
                     icon="fa-pencil-square-o"
-                    invisible="type == 'lead'"
+                    invisible="type == 'lead' or request_type != 'supplier'"
+                    groups="purchase.group_purchase_user"
                 >
                     <field
                         name="request_for_quotation_count"
@@ -96,9 +120,10 @@
                 <button
                     class="oe_stat_button"
                     type="object"
-                    invisible="purchase_amount_total == 0 or type == 'lead'"
-                    name="action_view_sale_order"
+                    name="action_view_purchase_order"
                     icon="fa-usd"
+                    invisible="purchase_order_count == 0 or type == 'lead' or request_type != 'supplier'"
+                    groups="purchase.group_purchase_user"
                 >
                     <div class="o_field_widget o_stat_info">
                         <span class="o_stat_value">
@@ -115,6 +140,7 @@
             </button>
         </field>
     </record>
+
     <record id="quick_create_opportunity_form" model="ir.ui.view">
         <field name="name">srm.lead.form.quick_create</field>
         <field name="model">crm.lead</field>
@@ -123,6 +149,129 @@
             <field name="name" position="after">
                 <field name="request_type" invisible="1" />
             </field>
+        </field>
+    </record>
+
+    <!-- Lists: optional Request Type column -->
+    <record id="crm_case_tree_view_leads" model="ir.ui.view">
+        <field name="name">crm.lead.list.lead.srm</field>
+        <field name="model">crm.lead</field>
+        <field name="inherit_id" ref="crm.crm_case_tree_view_leads" />
+        <field name="arch" type="xml">
+            <field name="team_id" position="after">
+                <field name="request_type" optional="hide" />
+            </field>
+        </field>
+    </record>
+
+    <record id="crm_case_tree_view_oppor" model="ir.ui.view">
+        <field name="name">crm.lead.list.opportunity.srm</field>
+        <field name="model">crm.lead</field>
+        <field name="inherit_id" ref="crm.crm_case_tree_view_oppor" />
+        <field name="arch" type="xml">
+            <field name="team_id" position="after">
+                <field name="request_type" optional="hide" />
+            </field>
+        </field>
+    </record>
+
+    <!-- Searches: Request Type filters and group-by -->
+    <record id="view_crm_case_leads_filter" model="ir.ui.view">
+        <field name="name">crm.lead.search.lead.srm</field>
+        <field name="model">crm.lead</field>
+        <field name="inherit_id" ref="crm.view_crm_case_leads_filter" />
+        <field name="arch" type="xml">
+            <filter name="lost" position="after">
+                <separator />
+                <filter
+                    string="Customer Leads"
+                    name="request_type_customer"
+                    domain="[('request_type', '=', 'customer')]"
+                />
+                <filter
+                    string="Supplier Leads"
+                    name="request_type_supplier"
+                    domain="[('request_type', '=', 'supplier')]"
+                />
+                <filter
+                    string="Unspecified Request Type"
+                    name="request_type_unset"
+                    domain="[('request_type', '=', False)]"
+                />
+            </filter>
+            <filter name="saleschannel" position="after">
+                <filter
+                    string="Request Type"
+                    name="group_by_request_type"
+                    context="{'group_by': 'request_type'}"
+                />
+            </filter>
+        </field>
+    </record>
+
+    <record id="view_crm_case_opportunities_filter" model="ir.ui.view">
+        <field name="name">crm.lead.search.opportunity.srm</field>
+        <field name="model">crm.lead</field>
+        <field name="inherit_id" ref="crm.view_crm_case_opportunities_filter" />
+        <field name="arch" type="xml">
+            <filter name="filter_won_status_lost" position="after">
+                <separator />
+                <filter
+                    string="Customer Leads"
+                    name="request_type_customer"
+                    domain="[('request_type', '=', 'customer')]"
+                />
+                <filter
+                    string="Supplier Leads"
+                    name="request_type_supplier"
+                    domain="[('request_type', '=', 'supplier')]"
+                />
+                <filter
+                    string="Unspecified Request Type"
+                    name="request_type_unset"
+                    domain="[('request_type', '=', False)]"
+                />
+            </filter>
+            <filter name="saleschannel" position="after">
+                <filter
+                    string="Request Type"
+                    name="group_by_request_type"
+                    context="{'group_by': 'request_type'}"
+                />
+            </filter>
+        </field>
+    </record>
+
+    <record id="crm_opportunity_report_view_search" model="ir.ui.view">
+        <field name="name">crm.lead.search.report.srm</field>
+        <field name="model">crm.lead</field>
+        <field name="inherit_id" ref="crm.crm_opportunity_report_view_search" />
+        <field name="arch" type="xml">
+            <filter name="filter_won_status_lost" position="after">
+                <separator />
+                <filter
+                    string="Customer Leads"
+                    name="request_type_customer"
+                    domain="[('request_type', '=', 'customer')]"
+                />
+                <filter
+                    string="Supplier Leads"
+                    name="request_type_supplier"
+                    domain="[('request_type', '=', 'supplier')]"
+                />
+                <filter
+                    string="Unspecified Request Type"
+                    name="request_type_unset"
+                    domain="[('request_type', '=', False)]"
+                />
+            </filter>
+            <filter name="saleschannel" position="after">
+                <filter
+                    string="Request Type"
+                    name="group_by_request_type"
+                    context="{'group_by': 'request_type'}"
+                />
+            </filter>
         </field>
     </record>
 

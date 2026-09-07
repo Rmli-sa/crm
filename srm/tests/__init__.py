@@ -1,1 +1,1 @@
-from . import test_srm
+from . import test_srm, test_srm_visibility
