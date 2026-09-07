@@ -25,4 +25,5 @@
         "wizard/srm_opportunity_to_rfq.xml",
     ],
     "installable": True,
+    "uninstall_hook": "uninstall_hook",
 }

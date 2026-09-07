@@ -1,20 +1,29 @@
 <?xml version="1.0" ?>
 <odoo>
-    <record id="crm.action_your_pipeline" model="ir.actions.server">
-        <field
-            name="code"
-        >action = model.with_context(request_type='customer').action_your_pipeline()</field>
-    </record>
-
-    <record id="crm.crm_lead_action_pipeline" model="ir.actions.act_window">
+    <!--
+        The CRM app shows every lead that is not a supplier one, including
+        records whose request type was never set. "My Pipeline" and "Forecast"
+        are filtered in crm.team._action_update_to_pipeline; the actions below
+        are opened directly by their menus, so their domain is overridden in
+        place. hooks.uninstall_hook restores the core definitions.
+    -->
+    <record id="crm.crm_lead_all_leads" model="ir.actions.act_window">
         <field
             name="domain"
-        >[('type', '=', 'opportunity'), ('request_type', '=', 'customer')]</field>
+        >['&amp;', '|', ('type', '=', 'lead'), ('type', '=', False), ('request_type', '!=', 'supplier')]</field>
         <field name="context">{
-            'default_type': 'opportunity',
-            'search_default_assigned_to_me': 1,
-            'show_user_team_stages': 1,
+            'default_type': 'lead',
             'default_request_type': 'customer',
+            'search_default_type': 'lead',
+            'search_default_to_process': 1,
         }</field>
+    </record>
+
+    <record id="crm.crm_opportunity_report_action" model="ir.actions.act_window">
+        <field name="domain">[('request_type', '!=', 'supplier')]</field>
+    </record>
+
+    <record id="crm.crm_opportunity_report_action_lead" model="ir.actions.act_window">
+        <field name="domain">[('request_type', '!=', 'supplier')]</field>
     </record>
 </odoo>
